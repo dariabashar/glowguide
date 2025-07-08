@@ -3,17 +3,21 @@ import cv2
 from PIL import Image
 import numpy as np
 import colorsys
+import io
 
-def analyze_face(image_path):
-    mp_face_mesh = mp.solutions.face_mesh
-    image = cv2.imread(image_path)
+def analyze_face(image_bytes: bytes) -> dict:
     results_data = {}
+    mp_face_mesh = mp.solutions.face_mesh
+
+    # Читаем изображение как массив байт → в OpenCV изображение
+    file_bytes = np.frombuffer(image_bytes, np.uint8)
+    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
     if image is None:
-        print(f"Ошибка: не удалось загрузить изображение из {image_path}")
         results_data['error'] = "Could not load image"
         return results_data
 
+    # Анализ лица с помощью MediaPipe
     with mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True) as face_mesh:
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = face_mesh.process(rgb_image)
@@ -23,9 +27,9 @@ def analyze_face(image_path):
             coords = [(lm.x, lm.y, lm.z) for lm in face_landmarks.landmark]
             results_data['landmarks'] = coords
 
-            
             try:
-                image_pil = Image.open(image_path).convert("RGB")
+                # Используем PIL для анализа цвета
+                image_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
                 width, height = image_pil.size
                 crop_box = (
                     int(width * 0.45),
@@ -58,9 +62,8 @@ def analyze_face(image_path):
                 results_data['skin_tone'] = "unknown"
                 results_data['error'] = f"Color analysis failed: {str(e)}"
 
-            # Расстояние между глазами
             try:
-                left_eye = face_landmarks.landmark[468]  # Примерные координаты зрачков
+                left_eye = face_landmarks.landmark[468]
                 right_eye = face_landmarks.landmark[473]
                 eye_distance = abs(left_eye.x - right_eye.x)
 
@@ -76,7 +79,7 @@ def analyze_face(image_path):
             results_data['face_shape'] = "oval"
 
         else:
-            print("❗ Лицо не обнаружено.")
             results_data['error'] = "No face detected"
 
     return results_data
+

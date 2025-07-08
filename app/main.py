@@ -6,7 +6,7 @@ import uuid
 import os
 
 from app.face_analysis import analyze_face
-from app.makeup_recommender import generate_makeup_prompts, generate_ai_prompt_with_openai
+from app.makeup_recommender import generate_makeup_prompt, generate_ai_prompt_with_openai
 from app.runway_utils import generate_video_from_image
 from app.describe_makeup import describe_makeup_from_image
 from app import auth, models
@@ -39,20 +39,25 @@ app.include_router(auth_google.router)
 
 @app.get("/")
 def root():
-    return {"message": "YouGlow API is running"}
+    return {"message": "YouGlow API is running!!!"}
 
 @app.post("/makeup-recommendation/")
 async def makeup_recommendation(file: UploadFile = File(...)):
     filename = f"{uuid.uuid4()}.jpg"
     file_path = os.path.join(UPLOAD_DIR, filename)
 
+    # Сохраняем файл
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    analysis = analyze_face(file_path)
+    # Читаем байты (❗️)
+    with open(file_path, "rb") as f:
+        image_bytes = f.read()
+
+    analysis = analyze_face(image_bytes)  # ✅ теперь всё работает
+
     if "error" in analysis:
         return {"error": analysis["error"]}
-
 
     face_data = {
         "skin_tone": analysis.get("skin_tone", "unknown"),
@@ -61,17 +66,14 @@ async def makeup_recommendation(file: UploadFile = File(...)):
         "eye_distance": analysis.get("eye_distance", "medium"),
     }
 
-    
-    main_prompt, steps = generate_makeup_prompts(face_data)
+    main_prompt = generate_makeup_prompt(face_data)
+    steps = []  # пока пусто
 
-    with open(file_path, "rb") as f:
-        image_bytes = f.read()
 
     video_url = generate_video_from_image(image_bytes, prompt_text=main_prompt)
 
     if not video_url:
         return {"error": "Failed to generate video from Runway"}
-
 
     return {
         "filename": file.filename,
@@ -81,6 +83,7 @@ async def makeup_recommendation(file: UploadFile = File(...)):
         "steps": steps,
         "video_url": video_url
     }
+
 
 class GenerationResponse(BaseModel):
     video_url: str
@@ -109,17 +112,39 @@ async def try_on(
 
     return {"video_url": video_url}
 
+# @app.post("/generate-makeup")
+# async def generate_makeup_endpoint(file: UploadFile = File(...)):
+#     face_data = analyze_face(await file.read())
+#     if not face_data:
+#         return {"error": "No face detected"}
+
+#     base_prompt, steps = generate_makeup_prompt(face_data)
+#     enhanced_prompt = generate_ai_prompt_with_openai(base_prompt)
+
+#     return {
+#         "face_data": face_data,
+#         "enhanced_prompt": enhanced_prompt,
+#         "steps": steps
+#     }
+from fastapi import FastAPI, UploadFile, File
+
 @app.post("/generate-makeup")
 async def generate_makeup_endpoint(file: UploadFile = File(...)):
-    face_data = analyze_face(await file.read())
+    image_bytes = await file.read()
+
+    face_data = analyze_face(image_bytes)
     if not face_data:
         return {"error": "No face detected"}
 
-    base_prompt, steps = generate_makeup_prompts(face_data)
+    base_prompt, steps = generate_makeup_prompt(face_data)
     enhanced_prompt = generate_ai_prompt_with_openai(base_prompt)
+
+    # 🎥 Генерация видео
+    video_url = generate_video_from_image(image_bytes, prompt_text=enhanced_prompt)
 
     return {
         "face_data": face_data,
         "enhanced_prompt": enhanced_prompt,
-        "steps": steps
+        "steps": steps,
+        "video_url": video_url  # <-- Вот она ссылка
     }
