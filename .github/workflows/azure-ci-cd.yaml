@@ -2,15 +2,15 @@ name: CI/CD for FastAPI to Azure Web App
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Azure Login
         uses: azure/login@v1
@@ -27,8 +27,8 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
-            --file Dockerfile \
-            --tag ${{ secrets.ACR_NAME }}.azurecr.io/glowguidefastapi:${{ github.sha }} \
+            -f Dockerfile \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/glowguidefastapi:${{ github.sha }} \
             .
 
       - name: Push Docker image
@@ -46,6 +46,12 @@ jobs:
               --docker-registry-server-url https://${{ secrets.ACR_NAME }}.azurecr.io \
               --docker-registry-server-user ${{ secrets.ACR_USERNAME }} \
               --docker-registry-server-password ${{ secrets.ACR_PASSWORD }}
+
+            az webapp config appsettings set \
+              --resource-group glowguideResourceGroup \
+              --name glowguide-backend-7514 \
+              --settings WEBSITES_PORT=8000
+
             az webapp restart \
               --resource-group glowguideResourceGroup \
               --name glowguide-backend-7514
