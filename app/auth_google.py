@@ -7,6 +7,9 @@ from .database import SessionLocal
 from .models import User
 from .auth import create_access_token
 from fastapi.responses import RedirectResponse
+import requests
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 load_dotenv()
 
@@ -23,8 +26,8 @@ def get_db():
     finally:
         db.close()
 
-@router.get("/auth/callback")
-async def google_auth(request: Request, db: Session = Depends(get_db)):
+@router.post("/auth/callback")
+def google_auth(request: Request, db: Session = Depends(get_db)):
     code = request.query_params.get("code")
     if not code:
         raise HTTPException(status_code=400, detail="Missin smthng from Google")
@@ -38,28 +41,54 @@ async def google_auth(request: Request, db: Session = Depends(get_db)):
         "grant_type": "authorization_code"
     }
     
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(token_url, data=token_data)
-        token_resp.raise_for_status()
-        token_json = token_resp.json()
-        access_token = token_json.get("access_token")
+    # async with httpx.AsyncClient() as client:
+    #     token_resp = await client.post(token_url, data=token_data)
+    #     token_resp.raise_for_status()
+    #     token_json = token_resp.json()
+    #     access_token = token_json.get("access_token")
 
-    user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-    headers = {"Authorization": f"Bearer {access_token}"}
+    # user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+    # headers = {"Authorization": f"Bearer {access_token}"}
 
-    async with httpx.AsyncClient() as client:
-        user_resp = await client.get(user_info_url, headers=headers)
-        user_resp.raise_for_status()
-        user_json = user_resp.json()
-        email = user_json["email"]
-        name = user_json.get("name", email.split("@")[0])
+    # async with httpx.AsyncClient() as client:
+    #     user_resp = await client.get(user_info_url, headers=headers)
+    #     user_resp.raise_for_status()
+    #     user_json = user_resp.json()
+    #     email = user_json["email"]
+    #     name = user_json.get("name", email.split("@")[0])
 
-    user = db.query(User).filter_by(username=email).first()
+    # user = db.query(User).filter_by(username=email).first()
+    # if not user:
+    #     user = User(username=email, hashed_password="google_oauth")
+    #     db.add(user)
+    #     db.commit()
+    #     db.refresh(user)
+    
+    # token = create_access_token(data={"sub": user.username})
+    # return RedirectResponse(url=f"http://localhost:5174/auth/callback?token={token}")
+    token_response = requests.post(token_url, data=token_data)
+    token_response.raise_for_status()
+    token_info = token_response.json()
+
+    # 2. Verify the ID token to get user's info securely.
+    id_info = id_token.verify_oauth2_token(
+        token_info["id_token"], google_requests.Request(), GOOGLE_CLIENT_ID
+    )
+
+    google_user_id = id_info.get("sub")
+    name = id_info.get("name")
+    email = id_info.get("email")
+
+    # 3. Find or create the user in your database.
+    user = db.query(User).filter(User.google_id == google_user_id).first()
     if not user:
-        user = User(username=email, hashed_password="google_oauth")
+        # User is new, create an account for them.
+        user = User(email=email, google_id=google_user_id, username=name)
         db.add(user)
         db.commit()
         db.refresh(user)
-    
-    token = create_access_token(data={"sub": user.username})
-    return RedirectResponse(url=f"http://localhost:5174/auth/callback?token={token}")
+
+    # 4. Issue your application's own JWT for this user.
+    access_token = create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
+
