@@ -6,7 +6,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
-    email = Column(String, nullable=False, unique=True, index=True)
+    email = Column(String, nullable=True, unique=False, index=True)
     hashed_password = Column(String)
 
     google_id = Column(String, unique=True, nullable=True)
