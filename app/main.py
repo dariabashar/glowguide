@@ -16,9 +16,7 @@ from app.face_analysis import analyze_face
 from app.runway_utils import image_to_image as generate_image_from_selfie
 from app.describe_makeup import describe_makeup_from_image
 # from app import auth, models  # Временно отключаем аутентификацию
-from app.database import engine
 from app.ingredient_checker import check_ingredients
-from . import auth_google
 from app.routers.generate_make import router as generate_look_router
 
 # --- Константы и подготовка директорий ---
