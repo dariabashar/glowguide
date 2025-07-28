@@ -15,7 +15,7 @@ from app.makeup_recommender import (
 from app.face_analysis import analyze_face
 from app.runway_utils import image_to_image as generate_image_from_selfie
 from app.describe_makeup import describe_makeup_from_image
-# from app import auth, models  # Временно отключаем аутентификацию
+from app import auth, models  # Временно отключаем аутентификацию
 from app.ingredient_checker import check_ingredients
 from app.routers.generate_make import router as generate_look_router
 
@@ -186,13 +186,13 @@ async def check_ingredients_endpoint(request: IngredientCheckRequest):
 app.include_router(generate_look_router)
 
 # Временно отключаем аутентификацию для быстрого запуска
-# from app.auth import router as auth_router
-# app.include_router(auth_router)  
+from app.auth import router as auth_router
+app.include_router(auth_router)  
 
-# from app.routers.user_profile import router as user_router
-# app.include_router(user_router)
+from app.routers.user_profile import router as user_router
+app.include_router(user_router)
 
-# from app.database import engine
-# from app import models
+from app.database import engine
+from app import models
 
-# models.Base.metadata.create_all(bind=engine)
+models.Base.metadata.create_all(bind=engine)
